@@ -1,0 +1,106 @@
+# Builds the installers:
+#   - Windows: Highlight-Editor-Setup-<version>.exe (x64)
+#   - macOS:   Highlight Editor-<version>-arm64.dmg (Apple Silicon)
+#
+# Each is built on its own OS, because ffmpeg-static downloads the ffmpeg
+# binary for the machine that runs `npm ci`.
+#
+# - Pull requests and manual runs: installers are uploaded as workflow
+#   artifacts (Actions tab -> the run -> "Artifacts").
+# - Publishing a release: push a version tag (git tag v0.2.0 && git push
+#   origin v0.2.0), or run this workflow manually from the Actions tab and
+#   enter a tag name under "release". Both installers are attached to a
+#   GitHub Release with that name.
+name: Build installers
+
+on:
+  pull_request:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish a GitHub Release with this tag (e.g. v0.1.0). Leave empty to only build.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the bundled ffmpeg is the Windows build
+        shell: bash
+        run: |
+          test -f node_modules/ffmpeg-static/ffmpeg.exe
+          node_modules/ffmpeg-static/ffmpeg.exe -hide_banner -version | head -1
+          node_modules/@ffprobe-installer/win32-x64/ffprobe.exe -hide_banner -version | head -1
+      - name: Build installer
+        run: npm run build && npx electron-builder --win --x64 --publish never
+        env:
+          # No code-signing certificate yet: skip auto-discovery of one.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: dist/*.exe
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-latest # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the bundled ffmpeg and ffprobe are Apple Silicon builds
+        run: |
+          file node_modules/ffmpeg-static/ffmpeg | grep arm64
+          file node_modules/@ffprobe-installer/darwin-arm64/ffprobe | grep arm64
+          node_modules/ffmpeg-static/ffmpeg -hide_banner -version | head -1
+          node_modules/@ffprobe-installer/darwin-arm64/ffprobe -hide_banner -version | head -1
+      - name: Build dmg
+        # The app gets an ad-hoc signature in build/afterPack.cjs.
+        run: npm run build && npx electron-builder --mac dmg --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Check the app is signed (ad-hoc)
+        run: codesign --verify --deep --verbose=2 "dist/mac-arm64/Highlight Editor.app"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mac-installer
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [windows, mac]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release != '')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.release || github.ref_name }}
+          name: Highlight Editor ${{ inputs.release || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            Download the installer for your computer:
+
+            - **Windows:** `Highlight-Editor-Setup-*.exe`
+            - **Mac (Apple Silicon):** `Highlight Editor-*-arm64.dmg`
+
+            These aren't signed with a paid developer certificate yet, so Windows and macOS will warn the first time. See [Troubleshooting installs](https://github.com/${{ github.repository }}/blob/main/README.md#troubleshooting-installs) for how to get past it, including on parent-managed accounts.
+          files: installers/*

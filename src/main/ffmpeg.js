@@ -3,7 +3,9 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { readFile, unlink } from 'fs/promises'
 import ffmpegStatic from 'ffmpeg-static'
-import ffprobeStatic from 'ffprobe-static'
+// @ffprobe-installer ships a native binary per platform (ffprobe-static's
+// "darwin/arm64" build is actually Intel-only and needs Rosetta).
+import ffprobeInstaller from '@ffprobe-installer/ffprobe'
 
 // In a packaged app the binaries live in app.asar.unpacked, not inside the asar.
 function unpacked(p) {
@@ -11,7 +13,7 @@ function unpacked(p) {
 }
 
 export const ffmpegPath = unpacked(ffmpegStatic)
-export const ffprobePath = unpacked(ffprobeStatic.path)
+export const ffprobePath = unpacked(ffprobeInstaller.path)
 
 export function probeVideo(filePath) {
   return new Promise((resolve, reject) => {
