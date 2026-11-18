@@ -92,6 +92,14 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [tab, setTab] = useState('clip') // clip | player | reel
   const [exporting, setExporting] = useState(null) // {label, done, total, subPct}
+  const [panelWidths, setPanelWidths] = useState(loadPanelWidths)
+  const setPanelWidth = (side, w) => setPanelWidths((cur) => {
+    const next = { ...cur, [side]: w }
+    try { localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(next)) } catch {}
+    return next
+  })
+  const exportingRef = useRef(null)
+  exportingRef.current = exporting
   const [busy, setBusy] = useState('')
   const [projectPath, setProjectPath] = useState(null)
   const [playhead, setPlayhead] = useState(0) // preview playhead in source seconds
@@ -207,13 +215,17 @@ export default function App() {
     if (selectedId === id) setSelectedId(null)
   }
 
-  function moveClip(id, dir) {
+  // Drag-to-reorder from the clips sidebar: move clip `id` so it lands at
+  // position `toIndex` in the list as it was before the move.
+  function reorderClip(id, toIndex) {
     setProject((p) => {
-      const i = p.clips.findIndex((c) => c.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= p.clips.length) return p
+      const from = p.clips.findIndex((c) => c.id === id)
+      if (from < 0) return p
+      const to = toIndex > from ? toIndex - 1 : toIndex
+      if (to === from) return p
       const clips = [...p.clips]
-      ;[clips[i], clips[j]] = [clips[j], clips[i]]
+      const [moved] = clips.splice(from, 1)
+      clips.splice(to, 0, moved)
       return { ...p, clips }
     })
   }
@@ -240,9 +252,16 @@ export default function App() {
     }
   }
 
-  async function openProject() {
+  // filePath: open that file directly (from Finder/Explorer); otherwise show the Open dialog.
+  async function openProject(filePath) {
     if (dirty && !window.confirm('Discard unsaved changes to the current project?')) return
-    const res = await window.api.openProject()
+    let res
+    try {
+      res = await window.api.openProject(typeof filePath === 'string' ? filePath : undefined)
+    } catch (e) {
+      alert('Could not open project: ' + e.message)
+      return
+    }
     if (!res) return
     try {
       const loaded = JSON.parse(res.data)
@@ -429,22 +448,32 @@ export default function App() {
     }
   }
 
-  // Keyboard: Cmd/Ctrl+S save, +Shift = Save As, Cmd/Ctrl+O open.
+  // File menu (native menu bar). Its shortcuts (Cmd/Ctrl+N, O, S, Shift+S, I,
+  // E) replace the old keydown handler. A ref keeps the handlers current, since
+  // they close over project state.
+  const menuHandlers = useRef({})
+  menuHandlers.current = {
+    new: newProject,
+    open: openProject,
+    save: () => saveProject(false),
+    saveAs: () => saveProject(true),
+    import: importVideos,
+    music: chooseMusic,
+    export: doExport,
+    openPath: (filePath) => openProject(filePath)
+  }
   useEffect(() => {
-    const onKey = (e) => {
-      if (!(e.metaKey || e.ctrlKey)) return
-      const k = e.key.toLowerCase()
-      if (k === 's') {
-        e.preventDefault()
-        saveProject(e.shiftKey)
-      } else if (k === 'o') {
-        e.preventDefault()
-        openProject()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+    const off = window.api.onMenuCommand((command, arg) => {
+      if (exportingRef.current) return // ignore while an export is running
+      const fn = menuHandlers.current[command]
+      if (fn) fn(arg)
+    })
+    // A .hlp double-clicked in Finder/Explorer before the window was ready.
+    window.api.takePendingOpen().then((p) => {
+      if (p) menuHandlers.current.openPath(p)
+    })
+    return off
+  }, [])
 
   const reelSeconds = estimateReel(project)
   const projectName = projectPath ? projectPath.split(/[\\/]/).pop() : 'Untitled project'
@@ -452,24 +481,21 @@ export default function App() {
   return (
     <div className="app">
       <TopBar
-        onImport={importVideos}
-        onNew={newProject}
         onSave={() => saveProject(false)}
-        onSaveAs={() => saveProject(true)}
-        onOpen={openProject}
         onExport={doExport}
         busy={busy}
         reelSeconds={reelSeconds}
         projectName={projectName}
         dirty={dirty}
       />
-      <div className="body">
+      <div className="body" style={{ gridTemplateColumns: `${panelWidths.left}px 1fr ${panelWidths.right}px` }}>
         <LibraryPanel
+          resizer={<PanelResizer side="left" width={panelWidths.left} onResize={(w) => setPanelWidth('left', w)} />}
           clips={project.clips}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onRemove={removeClip}
-          onMove={moveClip}
+          onReorder={reorderClip}
           onImport={importVideos}
           onDropFiles={importDroppedFiles}
           missing={missing}
@@ -478,6 +504,7 @@ export default function App() {
         />
         <PreviewPanel clip={selected} player={project.player} aspect={project.export.aspect} onUpdateClip={updateClip} onTime={setPlayhead} />
         <div className="inspector">
+          <PanelResizer side="right" width={panelWidths.right} onResize={(w) => setPanelWidth('right', w)} />
           <div className="tabs">
             <button className={tab === 'clip' ? 'on' : ''} onClick={() => setTab('clip')}>Clip</button>
             <button className={tab === 'player' ? 'on' : ''} onClick={() => setTab('player')}>Player</button>
@@ -545,7 +572,10 @@ function estimateReel(project) {
   return t
 }
 
-function TopBar({ onImport, onNew, onSave, onSaveAs, onOpen, onExport, reelSeconds, projectName, dirty }) {
+const IS_MAC = navigator.platform.startsWith('Mac')
+
+// New, Open, Save As and Import live in the File menu (see src/main/index.js).
+function TopBar({ onSave, onExport, reelSeconds, projectName, dirty }) {
   return (
     <div className="topbar">
       <div className="brand">⚽ Highlight Editor</div>
@@ -554,11 +584,7 @@ function TopBar({ onImport, onNew, onSave, onSaveAs, onOpen, onExport, reelSecon
       </div>
       <div className="spacer" />
       <div className="reel-len">Reel ≈ {fmt(reelSeconds)}{reelSeconds > 150 ? ' ⚠ long' : ''}</div>
-      <button onClick={onImport}>Import Videos</button>
-      <button onClick={onNew}>New</button>
-      <button onClick={onOpen}>Open…</button>
-      <button onClick={onSave}>Save</button>
-      <button onClick={onSaveAs} title="Save As…">Save As…</button>
+      <button onClick={onSave} title={IS_MAC ? 'Save (⌘S)' : 'Save (Ctrl+S)'}>Save</button>
       <button className="primary" onClick={onExport}>Export Reel</button>
     </div>
   )
@@ -570,9 +596,104 @@ function isVideoPath(path) {
   return VIDEO_EXTS.includes(ext)
 }
 
-function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport, onDropFiles, missing, onRelink, thumbs }) {
+// Sidebar widths: draggable dividers, remembered between launches.
+const PANEL_WIDTHS_KEY = 'panelWidths'
+const PANEL_LIMITS = { left: { def: 260, min: 200, max: 520 }, right: { def: 340, min: 300, max: 640 } }
+const MIN_CENTER = 420 // keep the preview usable
+
+function loadPanelWidths() {
+  const w = { left: PANEL_LIMITS.left.def, right: PANEL_LIMITS.right.def }
+  try {
+    const saved = JSON.parse(localStorage.getItem(PANEL_WIDTHS_KEY) || '{}')
+    for (const k of ['left', 'right']) if (typeof saved[k] === 'number') w[k] = saved[k]
+  } catch {}
+  return w
+}
+
+// A thin handle on a sidebar's inner edge. Drag to resize; double-click resets.
+function PanelResizer({ side, width, onResize }) {
+  const { def, min, max } = PANEL_LIMITS[side]
+  function onPointerDown(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = width
+    const body = e.currentTarget.closest('.body')
+    const other = side === 'left' ? body.lastElementChild : body.firstElementChild
+    const room = body.clientWidth - other.offsetWidth - MIN_CENTER
+    const move = (ev) => {
+      const dx = side === 'left' ? ev.clientX - startX : startX - ev.clientX
+      onResize(Math.round(Math.max(min, Math.min(max, room, startW + dx))))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('resizing')
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    document.body.classList.add('resizing')
+  }
+  return (
+    <div
+      className={'panel-resizer ' + side}
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => onResize(def)}
+      title="Drag to resize (double-click to reset)"
+    />
+  )
+}
+
+// Custom drag type for reordering, so it never looks like a Finder file drop
+// (that check looks for 'Files' in dataTransfer.types).
+const CLIP_DRAG_TYPE = 'application/x-highlight-clip'
+
+function LibraryPanel({ resizer, clips, selectedId, onSelect, onRemove, onReorder, onImport, onDropFiles, missing, onRelink, thumbs }) {
   const [dropActive, setDropActive] = useState(false)
   const dragDepth = useRef(0) // dragenter/leave fire for every child element
+
+  // Reorder state: which clip is being dragged, and where it would land
+  // (index in the list; the line is drawn above that row, or below the last).
+  const [draggingId, setDraggingId] = useState(null)
+  const [dropIndex, setDropIndex] = useState(null)
+  const isClipDrag = (e) => Array.from(e.dataTransfer?.types || []).includes(CLIP_DRAG_TYPE)
+
+  const rowDragProps = (c, i) => ({
+    draggable: true,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(CLIP_DRAG_TYPE, c.id)
+      e.dataTransfer.effectAllowed = 'move'
+      setDraggingId(c.id)
+    },
+    onDragEnd: () => {
+      setDraggingId(null)
+      setDropIndex(null)
+    },
+    onDragOver: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const r = e.currentTarget.getBoundingClientRect()
+      setDropIndex(e.clientY < r.top + r.height / 2 ? i : i + 1)
+    }
+  })
+
+  // The drop itself is handled on the list, so dropping in the gap between
+  // rows works too (it uses the last line position shown).
+  const listDropProps = {
+    onDragOver: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+    },
+    onDrop: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      const id = e.dataTransfer.getData(CLIP_DRAG_TYPE)
+      if (id && dropIndex != null) onReorder(id, dropIndex)
+      setDraggingId(null)
+      setDropIndex(null)
+    }
+  }
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
 
@@ -604,20 +725,38 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport,
 
   return (
     <div className={'library' + (dropActive ? ' drop-active' : '')} {...dropProps}>
+      {resizer}
       {dropActive && <div className="drop-overlay">Drop videos to add clips</div>}
       <div className="panel-title">Clips ({clips.length})</div>
       <div className="hint">Order = play order. Put your best clips first.</div>
-      <div className="clip-list">
+      <div className="clip-list" {...listDropProps}>
         {clips.length === 0 && <div className="empty">Import or drag videos here to begin.</div>}
         {clips.map((c, i) => {
           const gone = missing && missing[c.src]
           return (
             <div
               key={c.id}
-              className={'clip-row' + (c.id === selectedId ? ' sel' : '') + (gone ? ' gone' : '')}
+              className={
+                'clip-row' +
+                (c.id === selectedId ? ' sel' : '') +
+                (gone ? ' gone' : '') +
+                (c.id === draggingId ? ' dragging' : '') +
+                (draggingId && dropIndex === i ? ' drop-before' : '') +
+                (draggingId && dropIndex === clips.length && i === clips.length - 1 ? ' drop-after' : '')
+              }
               onClick={() => onSelect(c.id)}
+              {...rowDragProps(c, i)}
             >
-              <div className="clip-idx">{i + 1}</div>
+              <div className="clip-order">
+                <div className="clip-idx">{i + 1}</div>
+                <div className="drag-handle" title="Drag to reorder">
+                  <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true">
+                    {[2, 6, 10].map((x) => (
+                      <g key={x}><circle cx={x} cy="2" r="1.2" /><circle cx={x} cy="6" r="1.2" /></g>
+                    ))}
+                  </svg>
+                </div>
+              </div>
               <div className="clip-thumb">
                 {thumbs && thumbs[c.id] ? <img src={thumbs[c.id]} alt="" draggable={false} /> : <div className="thumb-ph" />}
               </div>
@@ -635,8 +774,6 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport,
                 )}
               </div>
               <div className="clip-actions" onClick={(e) => e.stopPropagation()}>
-                <button title="Move up" onClick={() => onMove(c.id, -1)}>▲</button>
-                <button title="Move down" onClick={() => onMove(c.id, 1)}>▼</button>
                 <button title="Remove" onClick={() => onRemove(c.id)}>✕</button>
               </div>
             </div>
@@ -704,10 +841,16 @@ function PreviewPanel({ clip, player, aspect, onUpdateClip, onTime }) {
 
   useEffect(() => () => { if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current) }, [])
 
+  // Re-measure whenever the preview area changes size: window resizes and
+  // sidebar resizes both change it, but only the first fires 'resize'.
+  const hasClip = !!clip
   useEffect(() => {
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [measure])
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(wrap)
+    return () => ro.disconnect()
+  }, [measure, hasClip])
 
   if (!clip) {
     return (
@@ -725,9 +868,20 @@ function PreviewPanel({ clip, player, aspect, onUpdateClip, onTime }) {
   // their on-screen windows as you scrub, matching the exported result.
   const clipT = time - clip.inSec
   const hlStart = hl.startSec || 0
+  // Match the export. With "freeze" on, the marker is shown only during the
+  // held frame and is gone the moment motion resumes; while paused, it also
+  // shows when you're parked on its start frame, so it can be placed. Without
+  // freeze it stays up for durationSec of OUTPUT time, which is less source
+  // time on a slowed-down clip (the preview plays at normal speed).
+  const speed = clip.slowmo && clip.slowmo < 1 ? clip.slowmo : 1
+  const atHlStart = clipT >= hlStart - 0.05 && clipT <= hlStart + 0.05
   const hlOn =
     hl.enabled &&
-    (placing || (clipT >= hlStart - 0.05 && clipT <= hlStart + (hl.durationSec || 1.5)))
+    (placing ||
+      frozen ||
+      (hl.freeze
+        ? !playing && atHlStart
+        : clipT >= hlStart - 0.05 && clipT <= hlStart + (hl.durationSec || 1.5) * speed))
   const cardOn =
     clip.showPlayerCard &&
     (player.name || player.number) &&

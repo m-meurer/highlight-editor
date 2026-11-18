@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eef0f3"/>
+    </linearGradient>
+    <linearGradient id="pitch" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e222b"/>
+      <stop offset="1" stop-color="#0f1115"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <clipPath id="screen"><rect x="262" y="300" width="500" height="380" rx="36"/></clipPath>
+  </defs>
+  <!-- page with folded corner -->
+  <path filter="url(#shadow)" fill="url(#page)" stroke="#d5d9e0" stroke-width="4"
+        d="M226 72 H640 L830 262 V912 a40 40 0 0 1 -40 40 H226 a40 40 0 0 1 -40 -40 V112 a40 40 0 0 1 40 -40 Z"/>
+  <path fill="#dfe3e9" d="M640 72 V222 a40 40 0 0 0 40 40 H830 Z"/>
+  <!-- reel "screen": dark pitch with field markings -->
+  <rect x="262" y="300" width="500" height="380" rx="36" fill="url(#pitch)"/>
+  <g clip-path="url(#screen)" fill="none" stroke="#39d98a" stroke-opacity="0.35" stroke-width="8">
+    <line x1="512" y1="300" x2="512" y2="680"/>
+    <circle cx="512" cy="490" r="78"/>
+    <rect x="232" y="400" width="90" height="180"/>
+    <rect x="702" y="400" width="90" height="180"/>
+  </g>
+  <!-- play button -->
+  <circle cx="512" cy="490" r="96" fill="#39d98a"/>
+  <path d="M482 438 L572 490 L482 542 Z" fill="#0f1115"/>
+  <!-- film strip timeline -->
+  <rect x="262" y="712" width="500" height="44" rx="12" fill="#2a2f3a"/>
+  <rect x="262" y="712" width="300" height="44" rx="12" fill="#39d98a"/>
+  <!-- label -->
+  <text x="508" y="866" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="104" letter-spacing="6" fill="#2a2f3a">HLP</text>
+</svg>

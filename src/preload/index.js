@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('export:progress', handler)
     return () => ipcRenderer.removeListener('export:progress', handler)
   },
+  // File menu commands from the native menu bar: new, open, save, saveAs, import, music, export,
+  // plus openPath (with a file path) when a .hlp is opened from Finder/Explorer.
+  takePendingOpen: () => ipcRenderer.invoke('project:takePendingOpen'),
+  onMenuCommand: (cb) => {
+    const handler = (_e, command, arg) => cb(command, arg)
+    ipcRenderer.on('menu:command', handler)
+    return () => ipcRenderer.removeListener('menu:command', handler)
+  },
   // Turn an absolute file path into a media:// URL the <video> tag can load.
   toMediaUrl: (filePath) => {
     let p = filePath.replace(/\\/g, '/')
