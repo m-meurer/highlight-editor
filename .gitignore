@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+release/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.*
+
+# Local project save files (contain absolute paths)
+*.hlp
