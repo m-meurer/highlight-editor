@@ -841,10 +841,16 @@ function PreviewPanel({ clip, player, aspect, onUpdateClip, onTime }) {
 
   useEffect(() => () => { if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current) }, [])
 
+  // Re-measure whenever the preview area changes size: window resizes and
+  // sidebar resizes both change it, but only the first fires 'resize'.
+  const hasClip = !!clip
   useEffect(() => {
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [measure])
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(wrap)
+    return () => ro.disconnect()
+  }, [measure, hasClip])
 
   if (!clip) {
     return (
