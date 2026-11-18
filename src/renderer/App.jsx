@@ -92,6 +92,12 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [tab, setTab] = useState('clip') // clip | player | reel
   const [exporting, setExporting] = useState(null) // {label, done, total, subPct}
+  const [panelWidths, setPanelWidths] = useState(loadPanelWidths)
+  const setPanelWidth = (side, w) => setPanelWidths((cur) => {
+    const next = { ...cur, [side]: w }
+    try { localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(next)) } catch {}
+    return next
+  })
   const exportingRef = useRef(null)
   exportingRef.current = exporting
   const [busy, setBusy] = useState('')
@@ -207,17 +213,6 @@ export default function App() {
   function removeClip(id) {
     setProject((p) => ({ ...p, clips: p.clips.filter((c) => c.id !== id) }))
     if (selectedId === id) setSelectedId(null)
-  }
-
-  function moveClip(id, dir) {
-    setProject((p) => {
-      const i = p.clips.findIndex((c) => c.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= p.clips.length) return p
-      const clips = [...p.clips]
-      ;[clips[i], clips[j]] = [clips[j], clips[i]]
-      return { ...p, clips }
-    })
   }
 
   // Drag-to-reorder from the clips sidebar: move clip `id` so it lands at
@@ -493,13 +488,13 @@ export default function App() {
         projectName={projectName}
         dirty={dirty}
       />
-      <div className="body">
+      <div className="body" style={{ gridTemplateColumns: `${panelWidths.left}px 1fr ${panelWidths.right}px` }}>
         <LibraryPanel
+          resizer={<PanelResizer side="left" width={panelWidths.left} onResize={(w) => setPanelWidth('left', w)} />}
           clips={project.clips}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onRemove={removeClip}
-          onMove={moveClip}
           onReorder={reorderClip}
           onImport={importVideos}
           onDropFiles={importDroppedFiles}
@@ -509,6 +504,7 @@ export default function App() {
         />
         <PreviewPanel clip={selected} player={project.player} aspect={project.export.aspect} onUpdateClip={updateClip} onTime={setPlayhead} />
         <div className="inspector">
+          <PanelResizer side="right" width={panelWidths.right} onResize={(w) => setPanelWidth('right', w)} />
           <div className="tabs">
             <button className={tab === 'clip' ? 'on' : ''} onClick={() => setTab('clip')}>Clip</button>
             <button className={tab === 'player' ? 'on' : ''} onClick={() => setTab('player')}>Player</button>
@@ -600,11 +596,58 @@ function isVideoPath(path) {
   return VIDEO_EXTS.includes(ext)
 }
 
+// Sidebar widths: draggable dividers, remembered between launches.
+const PANEL_WIDTHS_KEY = 'panelWidths'
+const PANEL_LIMITS = { left: { def: 260, min: 200, max: 520 }, right: { def: 340, min: 300, max: 640 } }
+const MIN_CENTER = 420 // keep the preview usable
+
+function loadPanelWidths() {
+  const w = { left: PANEL_LIMITS.left.def, right: PANEL_LIMITS.right.def }
+  try {
+    const saved = JSON.parse(localStorage.getItem(PANEL_WIDTHS_KEY) || '{}')
+    for (const k of ['left', 'right']) if (typeof saved[k] === 'number') w[k] = saved[k]
+  } catch {}
+  return w
+}
+
+// A thin handle on a sidebar's inner edge. Drag to resize; double-click resets.
+function PanelResizer({ side, width, onResize }) {
+  const { def, min, max } = PANEL_LIMITS[side]
+  function onPointerDown(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = width
+    const body = e.currentTarget.closest('.body')
+    const other = side === 'left' ? body.lastElementChild : body.firstElementChild
+    const room = body.clientWidth - other.offsetWidth - MIN_CENTER
+    const move = (ev) => {
+      const dx = side === 'left' ? ev.clientX - startX : startX - ev.clientX
+      onResize(Math.round(Math.max(min, Math.min(max, room, startW + dx))))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('resizing')
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    document.body.classList.add('resizing')
+  }
+  return (
+    <div
+      className={'panel-resizer ' + side}
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => onResize(def)}
+      title="Drag to resize (double-click to reset)"
+    />
+  )
+}
+
 // Custom drag type for reordering, so it never looks like a Finder file drop
 // (that check looks for 'Files' in dataTransfer.types).
 const CLIP_DRAG_TYPE = 'application/x-highlight-clip'
 
-function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onReorder, onImport, onDropFiles, missing, onRelink, thumbs }) {
+function LibraryPanel({ resizer, clips, selectedId, onSelect, onRemove, onReorder, onImport, onDropFiles, missing, onRelink, thumbs }) {
   const [dropActive, setDropActive] = useState(false)
   const dragDepth = useRef(0) // dragenter/leave fire for every child element
 
@@ -682,6 +725,7 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onReorder
 
   return (
     <div className={'library' + (dropActive ? ' drop-active' : '')} {...dropProps}>
+      {resizer}
       {dropActive && <div className="drop-overlay">Drop videos to add clips</div>}
       <div className="panel-title">Clips ({clips.length})</div>
       <div className="hint">Order = play order. Put your best clips first.</div>
@@ -703,14 +747,16 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onReorder
               onClick={() => onSelect(c.id)}
               {...rowDragProps(c, i)}
             >
-              <div className="drag-handle" title="Drag to reorder">
-                <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true">
-                  {[2, 7, 12].map((y) => (
-                    <g key={y}><circle cx="2" cy={y} r="1.3" /><circle cx="6" cy={y} r="1.3" /></g>
-                  ))}
-                </svg>
+              <div className="clip-order">
+                <div className="clip-idx">{i + 1}</div>
+                <div className="drag-handle" title="Drag to reorder">
+                  <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true">
+                    {[2, 6, 10].map((x) => (
+                      <g key={x}><circle cx={x} cy="2" r="1.2" /><circle cx={x} cy="6" r="1.2" /></g>
+                    ))}
+                  </svg>
+                </div>
               </div>
-              <div className="clip-idx">{i + 1}</div>
               <div className="clip-thumb">
                 {thumbs && thumbs[c.id] ? <img src={thumbs[c.id]} alt="" draggable={false} /> : <div className="thumb-ph" />}
               </div>
@@ -728,8 +774,6 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onReorder
                 )}
               </div>
               <div className="clip-actions" onClick={(e) => e.stopPropagation()}>
-                <button title="Move up" onClick={() => onMove(c.id, -1)}>▲</button>
-                <button title="Move down" onClick={() => onMove(c.id, 1)}>▼</button>
                 <button title="Remove" onClick={() => onRemove(c.id)}>✕</button>
               </div>
             </div>

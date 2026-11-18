@@ -84,13 +84,21 @@ input[type='checkbox'] { width: auto; }
 .clip-meta { flex: 1; min-width: 0; }
 .clip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .clip-sub { color: var(--muted); font-size: 11px; }
-.clip-actions { display: flex; gap: 2px; opacity: 0; }
-.clip-row:hover .clip-actions { opacity: 1; }
+.clip-actions { position: absolute; right: 6px; top: 6px; display: flex; gap: 2px; opacity: 0; pointer-events: none; }
+.clip-row:hover .clip-actions { opacity: 1; pointer-events: auto; }
 .clip-actions button { padding: 2px 5px; font-size: 10px; }
 .clip-row.gone { border-color: #7a3b3b; }
+/* Resizable sidebars */
+.panel-resizer { position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 5; }
+.panel-resizer.left { right: -4px; }
+.panel-resizer.right { left: -4px; }
+.panel-resizer:hover, body.resizing .panel-resizer:active { background: rgba(57,217,138,0.35); }
+body.resizing { cursor: col-resize; }
+body.resizing * { pointer-events: none; }
 /* Drag to reorder */
 .clip-row { position: relative; }
-.drag-handle { flex: none; width: 10px; display: grid; place-items: center; color: var(--muted); opacity: 0.45; cursor: grab; margin-right: -2px; }
+.clip-order { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.drag-handle { display: grid; place-items: center; color: var(--muted); opacity: 0.45; cursor: grab; padding: 1px 2px; }
 .drag-handle svg { fill: currentColor; }
 .clip-row:hover .drag-handle { opacity: 1; }
 .clip-row.dragging { opacity: 0.4; }
@@ -135,7 +143,7 @@ input[type='checkbox'] { width: auto; }
 .playhead { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; box-shadow: 0 0 3px rgba(0,0,0,0.8); pointer-events: none; }
 .trim-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 
-.inspector { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.inspector { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; position: relative; }
 .tabs { display: flex; border-bottom: 1px solid var(--line); }
 .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; padding: 12px 8px; color: var(--muted); border-bottom: 2px solid transparent; }
 .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
