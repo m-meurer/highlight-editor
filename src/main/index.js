@@ -33,9 +33,51 @@ let mainWindow = null
 
 // Native menu bar. File menu items send a command to the renderer, which runs
 // the same handlers as the toolbar buttons (so dirty-checks etc. still apply).
-function sendMenuCommand(command) {
+function sendMenuCommand(command, arg) {
   const win = BrowserWindow.getFocusedWindow() || mainWindow
-  if (win) win.webContents.send('menu:command', command)
+  if (win) win.webContents.send('menu:command', command, arg)
+}
+
+// Opening a .hlp file from Finder / Explorer (double-click, "Open With", or
+// dropping it on the dock icon). On macOS this arrives as 'open-file', possibly
+// before the window exists; on Windows the path is in the command line.
+// A path that arrives before the renderer is listening waits in pendingOpen
+// until the renderer asks for it.
+let pendingOpen = null
+let rendererReady = false
+
+function hlpPathFrom(argv) {
+  return argv.slice(1).find((a) => a.toLowerCase().endsWith('.hlp') && existsSync(a)) || null
+}
+
+function openProjectFile(filePath) {
+  if (!filePath) return
+  if (mainWindow && rendererReady) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+    mainWindow.webContents.send('menu:command', 'openPath', filePath)
+  } else {
+    pendingOpen = filePath
+    if (app.isReady() && !mainWindow) createWindow()
+  }
+}
+
+app.on('open-file', (e, filePath) => {
+  e.preventDefault()
+  openProjectFile(filePath)
+})
+
+// One app instance: on Windows, double-clicking a .hlp while the app is open
+// starts a second process, which hands its file to the first and exits.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', (_e, argv) => {
+    const p = hlpPathFrom(argv)
+    if (p) openProjectFile(p)
+    else if (mainWindow) mainWindow.focus()
+  })
+  if (process.platform !== 'darwin') pendingOpen = hlpPathFrom(process.argv)
 }
 
 function buildMenu() {
@@ -87,8 +129,12 @@ function createWindow() {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  mainWindow.webContents.on('did-start-loading', () => {
+    rendererReady = false
+  })
   mainWindow.on('closed', () => {
     mainWindow = null
+    rendererReady = false
   })
 }
 
@@ -192,6 +238,14 @@ function registerIpc() {
   ipcMain.handle('project:saveTo', async (_e, filePath, projectJson) => {
     await writeFile(filePath, projectJson, 'utf-8')
     return filePath
+  })
+
+  // The renderer calls this once it is listening for menu commands.
+  ipcMain.handle('project:takePendingOpen', () => {
+    rendererReady = true
+    const p = pendingOpen
+    pendingOpen = null
+    return p
   })
 
   ipcMain.handle('project:open', async (_e, filePathArg) => {

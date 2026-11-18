@@ -242,9 +242,16 @@ export default function App() {
     }
   }
 
-  async function openProject() {
+  // filePath: open that file directly (from Finder/Explorer); otherwise show the Open dialog.
+  async function openProject(filePath) {
     if (dirty && !window.confirm('Discard unsaved changes to the current project?')) return
-    const res = await window.api.openProject()
+    let res
+    try {
+      res = await window.api.openProject(typeof filePath === 'string' ? filePath : undefined)
+    } catch (e) {
+      alert('Could not open project: ' + e.message)
+      return
+    }
     if (!res) return
     try {
       const loaded = JSON.parse(res.data)
@@ -442,14 +449,20 @@ export default function App() {
     saveAs: () => saveProject(true),
     import: importVideos,
     music: chooseMusic,
-    export: doExport
+    export: doExport,
+    openPath: (filePath) => openProject(filePath)
   }
   useEffect(() => {
-    return window.api.onMenuCommand((command) => {
+    const off = window.api.onMenuCommand((command, arg) => {
       if (exportingRef.current) return // ignore while an export is running
       const fn = menuHandlers.current[command]
-      if (fn) fn()
+      if (fn) fn(arg)
     })
+    // A .hlp double-clicked in Finder/Explorer before the window was ready.
+    window.api.takePendingOpen().then((p) => {
+      if (p) menuHandlers.current.openPath(p)
+    })
+    return off
   }, [])
 
   const reelSeconds = estimateReel(project)
@@ -458,11 +471,7 @@ export default function App() {
   return (
     <div className="app">
       <TopBar
-        onImport={importVideos}
-        onNew={newProject}
         onSave={() => saveProject(false)}
-        onSaveAs={() => saveProject(true)}
-        onOpen={openProject}
         onExport={doExport}
         busy={busy}
         reelSeconds={reelSeconds}
@@ -551,7 +560,10 @@ function estimateReel(project) {
   return t
 }
 
-function TopBar({ onImport, onNew, onSave, onSaveAs, onOpen, onExport, reelSeconds, projectName, dirty }) {
+const IS_MAC = navigator.platform.startsWith('Mac')
+
+// New, Open, Save As and Import live in the File menu (see src/main/index.js).
+function TopBar({ onSave, onExport, reelSeconds, projectName, dirty }) {
   return (
     <div className="topbar">
       <div className="brand">⚽ Highlight Editor</div>
@@ -560,11 +572,7 @@ function TopBar({ onImport, onNew, onSave, onSaveAs, onOpen, onExport, reelSecon
       </div>
       <div className="spacer" />
       <div className="reel-len">Reel ≈ {fmt(reelSeconds)}{reelSeconds > 150 ? ' ⚠ long' : ''}</div>
-      <button onClick={onImport}>Import Videos</button>
-      <button onClick={onNew}>New</button>
-      <button onClick={onOpen}>Open…</button>
-      <button onClick={onSave}>Save</button>
-      <button onClick={onSaveAs} title="Save As…">Save As…</button>
+      <button onClick={onSave} title={IS_MAC ? 'Save (⌘S)' : 'Save (Ctrl+S)'}>Save</button>
       <button className="primary" onClick={onExport}>Export Reel</button>
     </div>
   )
