@@ -1,6 +1,6 @@
 {
   "name": "highlight-editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Soccer highlight reel editor for recruiting clips",
   "main": "./out/main/index.js",
   "author": "Matt",
@@ -39,7 +39,45 @@
     ],
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.video"
+      "category": "public.app-category.video",
+      "extraResources": [
+        {
+          "from": "build/hlp.icns",
+          "to": "hlp.icns"
+        }
+      ],
+      "extendInfo": {
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Highlight Reel Project",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Owner",
+            "LSItemContentTypes": [
+              "com.matt.highlighteditor.hlp"
+            ],
+            "CFBundleTypeExtensions": [
+              "hlp"
+            ],
+            "CFBundleTypeIconFile": "hlp.icns"
+          }
+        ],
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.matt.highlighteditor.hlp",
+            "UTTypeDescription": "Highlight Reel Project",
+            "UTTypeConformsTo": [
+              "public.json",
+              "public.data"
+            ],
+            "UTTypeIconFile": "hlp.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "hlp"
+              ]
+            }
+          }
+        ]
+      }
     },
     "win": {
       "target": [
@@ -49,20 +87,20 @@
             "x64"
           ]
         }
+      ],
+      "fileAssociations": [
+        {
+          "ext": "hlp",
+          "name": "Highlight Reel Project",
+          "description": "Highlight Editor project",
+          "role": "Editor",
+          "icon": "hlp"
+        }
       ]
     },
     "directories": {
       "buildResources": "build"
     },
-    "fileAssociations": [
-      {
-        "ext": "hlp",
-        "name": "Highlight Reel Project",
-        "description": "Highlight Editor project",
-        "role": "Editor",
-        "icon": "hlp"
-      }
-    ],
     "nsis": {
       "oneClick": false,
       "perMachine": false,
