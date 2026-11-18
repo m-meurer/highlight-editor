@@ -3,6 +3,7 @@ import { join, extname } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync, createReadStream, statSync } from 'fs'
 import { Readable } from 'stream'
+import { execFile } from 'child_process'
 import { probeVideo, generateThumbnail } from './ffmpeg.js'
 import { runExport, cancelExport } from './exporter.js'
 
@@ -109,6 +110,22 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+// macOS: re-register this copy of the app with LaunchServices on each launch,
+// so Finder picks up the .hlp document icon and file type right after an
+// install or update, without the user running lsregister by hand. Skipped in
+// dev, and when macOS runs the app from a temporary "translocated" copy.
+const LSREGISTER =
+  '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+
+function registerWithLaunchServices() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return
+  const bundle = join(app.getPath('exe'), '..', '..', '..')
+  if (!bundle.endsWith('.app') || bundle.includes('/AppTranslocation/')) return
+  execFile(LSREGISTER, ['-f', bundle], (err) => {
+    if (err) console.warn('lsregister failed:', err.message)
+  })
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -139,6 +156,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  registerWithLaunchServices()
+
   // media://<absolute-file-path> -> stream from disk WITH HTTP range support,
   // which the <video> element needs to seek/jump to arbitrary positions.
   protocol.handle('media', (request) => {
