@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, Menu } from 'electron'
 import { join, extname } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync, createReadStream, statSync } from 'fs'
@@ -30,6 +30,42 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let mainWindow = null
+
+// Native menu bar. File menu items send a command to the renderer, which runs
+// the same handlers as the toolbar buttons (so dirty-checks etc. still apply).
+function sendMenuCommand(command) {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow
+  if (win) win.webContents.send('menu:command', command)
+}
+
+function buildMenu() {
+  const isMac = process.platform === 'darwin'
+  const item = (label, accelerator, command) => ({ label, accelerator, click: () => sendMenuCommand(command) })
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        item('New Project', 'CmdOrCtrl+N', 'new'),
+        item('Open Project…', 'CmdOrCtrl+O', 'open'),
+        { type: 'separator' },
+        item('Save', 'CmdOrCtrl+S', 'save'),
+        item('Save As…', 'Shift+CmdOrCtrl+S', 'saveAs'),
+        { type: 'separator' },
+        item('Import Videos…', 'CmdOrCtrl+I', 'import'),
+        item('Choose Music…', null, 'music'),
+        { type: 'separator' },
+        item('Export Reel…', 'CmdOrCtrl+E', 'export'),
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -99,6 +135,7 @@ app.whenReady().then(() => {
   })
 
   registerIpc()
+  buildMenu()
   createWindow()
 
   app.on('activate', () => {

@@ -92,6 +92,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [tab, setTab] = useState('clip') // clip | player | reel
   const [exporting, setExporting] = useState(null) // {label, done, total, subPct}
+  const exportingRef = useRef(null)
+  exportingRef.current = exporting
   const [busy, setBusy] = useState('')
   const [projectPath, setProjectPath] = useState(null)
   const [playhead, setPlayhead] = useState(0) // preview playhead in source seconds
@@ -429,22 +431,26 @@ export default function App() {
     }
   }
 
-  // Keyboard: Cmd/Ctrl+S save, +Shift = Save As, Cmd/Ctrl+O open.
+  // File menu (native menu bar). Its shortcuts (Cmd/Ctrl+N, O, S, Shift+S, I,
+  // E) replace the old keydown handler. A ref keeps the handlers current, since
+  // they close over project state.
+  const menuHandlers = useRef({})
+  menuHandlers.current = {
+    new: newProject,
+    open: openProject,
+    save: () => saveProject(false),
+    saveAs: () => saveProject(true),
+    import: importVideos,
+    music: chooseMusic,
+    export: doExport
+  }
   useEffect(() => {
-    const onKey = (e) => {
-      if (!(e.metaKey || e.ctrlKey)) return
-      const k = e.key.toLowerCase()
-      if (k === 's') {
-        e.preventDefault()
-        saveProject(e.shiftKey)
-      } else if (k === 'o') {
-        e.preventDefault()
-        openProject()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+    return window.api.onMenuCommand((command) => {
+      if (exportingRef.current) return // ignore while an export is running
+      const fn = menuHandlers.current[command]
+      if (fn) fn()
+    })
+  }, [])
 
   const reelSeconds = estimateReel(project)
   const projectName = projectPath ? projectPath.split(/[\\/]/).pop() : 'Untitled project'
