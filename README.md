@@ -18,7 +18,7 @@ Runs on macOS and Windows. All video processing happens on your computer with a 
 
 ### Windows
 
-1. Download `Highlight-Editor-Setup-<version>.exe`. Get it from the [Releases](https://github.com/m-meurer/highlight-editor/releases) page, or for an unreleased build, from the latest **Build Windows installer** run on the [Actions](https://github.com/m-meurer/highlight-editor/actions) tab under **Artifacts**.
+1. Download `Highlight-Editor-Setup-<version>.exe` from the [latest release](https://github.com/m-meurer/highlight-editor/releases/latest).
 2. Run it. The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 3. Choose an install folder. The installer adds Start menu and desktop shortcuts and registers `.hlp` project files. It installs just for the current user, so it doesn't need an administrator password.
 
@@ -26,9 +26,12 @@ If Windows blocks it, or the account is managed by a parent, see [Troubleshootin
 
 ### macOS
 
-There's no prebuilt Mac download yet. Build it from source (see below) with `npm run package:mac`, which creates a `.dmg` in `dist/`. Open the `.dmg` and drag **Highlight Editor** into **Applications**.
+Apple Silicon Macs (M1 or newer) only, for now.
 
-The app isn't signed by Apple, so macOS may refuse to open it the first time, especially if the `.dmg` was downloaded or copied from another computer. See [Troubleshooting installs](#troubleshooting-installs) at the bottom for the steps.
+1. Download `Highlight Editor-<version>-arm64.dmg` from the [latest release](https://github.com/m-meurer/highlight-editor/releases/latest).
+2. Open the `.dmg` and drag **Highlight Editor** into **Applications**.
+
+The app isn't signed by Apple, so macOS will refuse to open it the first time. See [Troubleshooting installs](#troubleshooting-installs) at the bottom for the steps.
 
 ## Keyboard shortcuts
 
@@ -61,10 +64,10 @@ npm run package:win   # Windows installer, run on Windows
 
 Build each installer on its own platform. `npm install` downloads the ffmpeg binary for the machine it runs on, so a build made on a Mac would ship the Mac ffmpeg inside the Windows installer.
 
-The Windows installer is also built automatically by GitHub Actions ([`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml)):
+GitHub Actions builds both installers automatically ([`.github/workflows/build.yml`](.github/workflows/build.yml)), each on its own OS:
 
-- **Every pull request, or a manual run from the Actions tab:** the installer is uploaded as a downloadable artifact.
-- **Pushing a version tag:** the installer is attached to a GitHub Release for that tag. To release, set `"version"` in `package.json`, commit, then run `git tag v0.2.0 && git push origin v0.2.0`.
+- **Every pull request:** the installers are uploaded as downloadable artifacts on the run's page.
+- **Publishing a release:** first set `"version"` in `package.json` and merge that. Then either push a tag (`git tag v0.2.0 && git push origin v0.2.0`), or go to **Actions → Build installers → Run workflow** and enter the tag name under **release**. The Windows `.exe` and Mac `.dmg` are attached to a GitHub Release with that name.
 
 ### Project layout
 
