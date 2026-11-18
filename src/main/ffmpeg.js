@@ -88,3 +88,31 @@ export async function generateThumbnail(filePath, timeSec) {
     unlink(outPath).catch(() => {})
   }
 }
+
+// Lightweight probe used at export time: does the file have an audio stream,
+// and how long is it? Clips filmed with sound off (or screen recordings, GoPro
+// time-lapses, etc.) have no audio stream at all, which the exporter must handle.
+export function probeStreams(filePath) {
+  return new Promise((resolve, reject) => {
+    const args = ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', filePath]
+    const proc = spawn(ffprobePath, args)
+    let out = ''
+    let err = ''
+    proc.stdout.on('data', (d) => (out += d))
+    proc.stderr.on('data', (d) => (err += d))
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(err || `ffprobe exited ${code}`))
+      try {
+        const json = JSON.parse(out)
+        const streams = json.streams || []
+        resolve({
+          hasAudio: streams.some((s) => s.codec_type === 'audio'),
+          duration: parseFloat(json.format?.duration) || 0
+        })
+      } catch (e) {
+        reject(e)
+      }
+    })
+  })
+}

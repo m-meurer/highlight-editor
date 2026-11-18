@@ -2,7 +2,9 @@ import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { mkdtemp, writeFile, rm } from 'fs/promises'
-import { ffmpegPath } from './ffmpeg.js'
+import { ffmpegPath, probeStreams } from './ffmpeg.js'
+
+const MUSIC_FADE_OUT_SEC = 3
 
 let current = null // { procs: Set, canceled: bool }
 
@@ -150,6 +152,18 @@ async function encodeClipSegment(clip, canvas, fps, dir, index, onStderr) {
   const inputs = ['-ss', String(clip.inSec || 0), '-t', String(trimDur), '-i', clip.src]
   for (const f of overlayFiles) inputs.push('-i', f.path)
 
+  // Clips with no audio stream (filmed muted, some phone/action-cam modes)
+  // would make `[0:a]` fail the whole export. Feed silence instead, as the
+  // last input, so every segment still has a stereo track for the concat.
+  // It runs as long as the source trim; atempo stretches it for slow-mo and
+  // -shortest trims any excess to the video.
+  const { hasAudio } = await probeStreams(clip.src)
+  let audioIn = '0:a'
+  if (!hasAudio) {
+    inputs.push('-f', 'lavfi', '-t', String(trimDur), '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')
+    audioIn = `${overlayFiles.length + 1}:a`
+  }
+
   const filters = []
   filters.push(`[0:v]${buildClipVideoFilter(clip, canvas, fps)}[base]`)
   let lastVideo = 'base'
@@ -172,22 +186,30 @@ async function encodeClipSegment(clip, canvas, fps, dir, index, onStderr) {
     lastVideo = outLabel
   })
 
-  // Audio: trim, adjust tempo for slow-mo, resample to a common format.
-  const aChain = ['aresample=48000']
-  if (speed < 1) aChain.unshift(atempoChain(speed))
+  // Audio: convert to float, adjust tempo for slow-mo, resample to a common
+  // format. The float step matters for the generated silence: anullsrc is
+  // 8-bit, and atempo on 8-bit audio leaves a faint DC offset instead of zero.
+  const aChain = ['aformat=sample_fmts=fltp']
+  if (speed < 1) aChain.push(atempoChain(speed))
+  aChain.push('aresample=48000')
+  // The freeze intro pads the video's start; pad the audio with the same
+  // silence, or -shortest cuts that much off the end of the clip.
+  if (clip.intro && clip.intro.type === 'freeze') {
+    aChain.push(`adelay=${Math.round((clip.intro.durationSec || 0.8) * 1000)}:all=1`)
+  }
   let audioOut = 'aout'
   if (freeze) {
-    filters.push(`[0:a]${aChain.join(',')}[a0]`)
+    filters.push(`[${audioIn}]${aChain.join(',')}[a0]`)
     audioOut = pushFreezeAudio(filters, Math.max(0, freeze.atSec || 0), freeze.durationSec)
   } else {
-    filters.push(`[0:a]${aChain.join(',')}[aout]`)
+    filters.push(`[${audioIn}]${aChain.join(',')}[aout]`)
   }
 
   const args = [
     ...inputs,
     '-filter_complex', filters.join(';'),
     '-map', `[${lastVideo}]`,
-    '-map', `[${audioOut}]?`,
+    '-map', `[${audioOut}]`,
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
     '-r', String(fps),
@@ -263,10 +285,18 @@ export async function runExport(spec, onProgress) {
 
     if (hasMusic) {
       const musicVol = spec.music.volume != null ? spec.music.volume : 0.3
-      // Duck original audio up, music down; mix. Music trimmed to video length.
+      // Fade the music out over the last few seconds of the reel instead of
+      // cutting it off mid-note. Use the real length of the rendered segments.
+      let reelSec = 0
+      for (const s of segments) reelSec += (await probeStreams(s)).duration
+      const fadeSec = Math.min(MUSIC_FADE_OUT_SEC, reelSec / 2)
+      const fade = reelSec > 0 ? `,afade=t=out:st=${(reelSec - fadeSec).toFixed(3)}:d=${fadeSec.toFixed(3)}` : ''
+      // Mix at set levels: game audio at full volume, music at musicVol.
+      // normalize=0 stops amix from halving both inputs. Music is trimmed to
+      // the video length.
       finalArgs.push(
         '-filter_complex',
-        `[0:a]volume=1.0[a0];[1:a]volume=${musicVol}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+        `[0:a]volume=1.0[a0];[1:a]volume=${musicVol}${fade}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
         '-map', '0:v', '-map', '[aout]'
       )
     } else {
