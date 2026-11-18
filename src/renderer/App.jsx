@@ -220,6 +220,21 @@ export default function App() {
     })
   }
 
+  // Drag-to-reorder from the clips sidebar: move clip `id` so it lands at
+  // position `toIndex` in the list as it was before the move.
+  function reorderClip(id, toIndex) {
+    setProject((p) => {
+      const from = p.clips.findIndex((c) => c.id === id)
+      if (from < 0) return p
+      const to = toIndex > from ? toIndex - 1 : toIndex
+      if (to === from) return p
+      const clips = [...p.clips]
+      const [moved] = clips.splice(from, 1)
+      clips.splice(to, 0, moved)
+      return { ...p, clips }
+    })
+  }
+
   async function chooseMusic() {
     const path = await window.api.openAudio()
     if (!path) return
@@ -485,6 +500,7 @@ export default function App() {
           onSelect={setSelectedId}
           onRemove={removeClip}
           onMove={moveClip}
+          onReorder={reorderClip}
           onImport={importVideos}
           onDropFiles={importDroppedFiles}
           missing={missing}
@@ -584,9 +600,57 @@ function isVideoPath(path) {
   return VIDEO_EXTS.includes(ext)
 }
 
-function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport, onDropFiles, missing, onRelink, thumbs }) {
+// Custom drag type for reordering, so it never looks like a Finder file drop
+// (that check looks for 'Files' in dataTransfer.types).
+const CLIP_DRAG_TYPE = 'application/x-highlight-clip'
+
+function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onReorder, onImport, onDropFiles, missing, onRelink, thumbs }) {
   const [dropActive, setDropActive] = useState(false)
   const dragDepth = useRef(0) // dragenter/leave fire for every child element
+
+  // Reorder state: which clip is being dragged, and where it would land
+  // (index in the list; the line is drawn above that row, or below the last).
+  const [draggingId, setDraggingId] = useState(null)
+  const [dropIndex, setDropIndex] = useState(null)
+  const isClipDrag = (e) => Array.from(e.dataTransfer?.types || []).includes(CLIP_DRAG_TYPE)
+
+  const rowDragProps = (c, i) => ({
+    draggable: true,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(CLIP_DRAG_TYPE, c.id)
+      e.dataTransfer.effectAllowed = 'move'
+      setDraggingId(c.id)
+    },
+    onDragEnd: () => {
+      setDraggingId(null)
+      setDropIndex(null)
+    },
+    onDragOver: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const r = e.currentTarget.getBoundingClientRect()
+      setDropIndex(e.clientY < r.top + r.height / 2 ? i : i + 1)
+    }
+  })
+
+  // The drop itself is handled on the list, so dropping in the gap between
+  // rows works too (it uses the last line position shown).
+  const listDropProps = {
+    onDragOver: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+    },
+    onDrop: (e) => {
+      if (!isClipDrag(e)) return
+      e.preventDefault()
+      const id = e.dataTransfer.getData(CLIP_DRAG_TYPE)
+      if (id && dropIndex != null) onReorder(id, dropIndex)
+      setDraggingId(null)
+      setDropIndex(null)
+    }
+  }
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
 
@@ -621,16 +685,31 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport,
       {dropActive && <div className="drop-overlay">Drop videos to add clips</div>}
       <div className="panel-title">Clips ({clips.length})</div>
       <div className="hint">Order = play order. Put your best clips first.</div>
-      <div className="clip-list">
+      <div className="clip-list" {...listDropProps}>
         {clips.length === 0 && <div className="empty">Import or drag videos here to begin.</div>}
         {clips.map((c, i) => {
           const gone = missing && missing[c.src]
           return (
             <div
               key={c.id}
-              className={'clip-row' + (c.id === selectedId ? ' sel' : '') + (gone ? ' gone' : '')}
+              className={
+                'clip-row' +
+                (c.id === selectedId ? ' sel' : '') +
+                (gone ? ' gone' : '') +
+                (c.id === draggingId ? ' dragging' : '') +
+                (draggingId && dropIndex === i ? ' drop-before' : '') +
+                (draggingId && dropIndex === clips.length && i === clips.length - 1 ? ' drop-after' : '')
+              }
               onClick={() => onSelect(c.id)}
+              {...rowDragProps(c, i)}
             >
+              <div className="drag-handle" title="Drag to reorder">
+                <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true">
+                  {[2, 7, 12].map((y) => (
+                    <g key={y}><circle cx="2" cy={y} r="1.3" /><circle cx="6" cy={y} r="1.3" /></g>
+                  ))}
+                </svg>
+              </div>
               <div className="clip-idx">{i + 1}</div>
               <div className="clip-thumb">
                 {thumbs && thumbs[c.id] ? <img src={thumbs[c.id]} alt="" draggable={false} /> : <div className="thumb-ph" />}
