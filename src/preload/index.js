@@ -1,7 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 contextBridge.exposeInMainWorld('api', {
   openVideos: () => ipcRenderer.invoke('dialog:openVideos'),
+  // Absolute path of a File from a drag-and-drop (File.path was removed in Electron 32).
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   openAudio: () => ipcRenderer.invoke('dialog:openAudio'),
   probe: (filePath) => ipcRenderer.invoke('media:probe', filePath),
   thumbnail: (filePath, timeSec) => ipcRenderer.invoke('media:thumbnail', filePath, timeSec),

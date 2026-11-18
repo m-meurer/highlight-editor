@@ -102,6 +102,22 @@ export default function App() {
 
   const selected = project.clips.find((c) => c.id === selectedId) || null
 
+  // Dropping a file anywhere outside the clips sidebar would otherwise make Electron
+  // navigate the window to that file and lose the project.
+  useEffect(() => {
+    const block = (e) => {
+      if (e.defaultPrevented) return // the clips sidebar already accepted it
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+    }
+    window.addEventListener('dragover', block)
+    window.addEventListener('drop', block)
+    return () => {
+      window.removeEventListener('dragover', block)
+      window.removeEventListener('drop', block)
+    }
+  }, [])
+
   // Dirty = project differs from the last saved/loaded snapshot.
   useEffect(() => {
     const cur = JSON.stringify(project)
@@ -154,6 +170,20 @@ export default function App() {
 
   async function importVideos() {
     const paths = await window.api.openVideos()
+    await addVideoPaths(paths)
+  }
+
+  // Files dropped from Finder/Explorer onto the clips sidebar. Non-video files are skipped.
+  async function importDroppedFiles(files) {
+    const paths = []
+    for (const f of files) {
+      const path = window.api.getPathForFile(f)
+      if (path && isVideoPath(path)) paths.push(path)
+    }
+    await addVideoPaths(paths)
+  }
+
+  async function addVideoPaths(paths) {
     if (!paths || !paths.length) return
     setBusy('Reading video files…')
     const added = []
@@ -441,6 +471,7 @@ export default function App() {
           onRemove={removeClip}
           onMove={moveClip}
           onImport={importVideos}
+          onDropFiles={importDroppedFiles}
           missing={missing}
           onRelink={relinkClip}
           thumbs={thumbs}
@@ -533,13 +564,51 @@ function TopBar({ onImport, onNew, onSave, onSaveAs, onOpen, onExport, reelSecon
   )
 }
 
-function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport, missing, onRelink, thumbs }) {
+const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm']
+function isVideoPath(path) {
+  const ext = path.split('.').pop().toLowerCase()
+  return VIDEO_EXTS.includes(ext)
+}
+
+function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport, onDropFiles, missing, onRelink, thumbs }) {
+  const [dropActive, setDropActive] = useState(false)
+  const dragDepth = useRef(0) // dragenter/leave fire for every child element
+
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files')
+
+  const dropProps = {
+    onDragEnter: (e) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      dragDepth.current += 1
+      setDropActive(true)
+    },
+    onDragOver: (e) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    },
+    onDragLeave: (e) => {
+      if (!hasFiles(e)) return
+      dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (dragDepth.current === 0) setDropActive(false)
+    },
+    onDrop: (e) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      dragDepth.current = 0
+      setDropActive(false)
+      onDropFiles(Array.from(e.dataTransfer.files))
+    }
+  }
+
   return (
-    <div className="library">
+    <div className={'library' + (dropActive ? ' drop-active' : '')} {...dropProps}>
+      {dropActive && <div className="drop-overlay">Drop videos to add clips</div>}
       <div className="panel-title">Clips ({clips.length})</div>
       <div className="hint">Order = play order. Put your best clips first.</div>
       <div className="clip-list">
-        {clips.length === 0 && <div className="empty">Import videos to begin.</div>}
+        {clips.length === 0 && <div className="empty">Import or drag videos here to begin.</div>}
         {clips.map((c, i) => {
           const gone = missing && missing[c.src]
           return (
@@ -550,7 +619,7 @@ function LibraryPanel({ clips, selectedId, onSelect, onRemove, onMove, onImport,
             >
               <div className="clip-idx">{i + 1}</div>
               <div className="clip-thumb">
-                {thumbs && thumbs[c.id] ? <img src={thumbs[c.id]} alt="" /> : <div className="thumb-ph" />}
+                {thumbs && thumbs[c.id] ? <img src={thumbs[c.id]} alt="" draggable={false} /> : <div className="thumb-ph" />}
               </div>
               <div className="clip-meta">
                 <div className="clip-name" title={c.src}>{c.name}</div>
