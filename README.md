@@ -174,3 +174,11 @@ Then open the app normally. If the app isn't in Applications, drag it from Finde
 #### If an export fails right after installing
 
 The first time the app runs ffmpeg (the video engine bundled inside it), macOS may check it, which can take a few seconds. Try the export again. If you see a warning that ffmpeg "cannot be opened", run the `xattr` command above, which clears the flag on everything inside the app.
+
+## License
+
+Highlight Editor is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). You're free to use it for personal and other noncommercial purposes, but you may not sell it or use it commercially.
+
+Required Notice: Copyright (c) 2026 Matt (https://github.com/m-meurer)
+
+This is a personal project, and outside contributions and pull requests aren't being accepted.
