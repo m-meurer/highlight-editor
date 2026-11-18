@@ -42,7 +42,7 @@ jobs:
         run: |
           test -f node_modules/ffmpeg-static/ffmpeg.exe
           node_modules/ffmpeg-static/ffmpeg.exe -hide_banner -version | head -1
-          node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe -hide_banner -version | head -1
+          node_modules/@ffprobe-installer/win32-x64/ffprobe.exe -hide_banner -version | head -1
       - name: Build installer
         run: npm run build && npx electron-builder --win --x64 --publish never
         env:
@@ -63,10 +63,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check the bundled ffmpeg is the Apple Silicon build
+      - name: Check the bundled ffmpeg and ffprobe are Apple Silicon builds
         run: |
           file node_modules/ffmpeg-static/ffmpeg | grep arm64
+          file node_modules/@ffprobe-installer/darwin-arm64/ffprobe | grep arm64
           node_modules/ffmpeg-static/ffmpeg -hide_banner -version | head -1
+          node_modules/@ffprobe-installer/darwin-arm64/ffprobe -hide_banner -version | head -1
       - name: Build dmg
         # identity "-" = ad-hoc signature. Not an Apple Developer ID, but
         # Apple Silicon refuses to run code with no signature at all.
