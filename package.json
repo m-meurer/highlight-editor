@@ -1,6 +1,6 @@
 {
   "name": "highlight-editor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Soccer highlight reel editor for recruiting clips",
   "main": "./out/main/index.js",
   "author": "Matt",

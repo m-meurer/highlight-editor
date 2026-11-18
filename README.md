@@ -137,7 +137,9 @@ Antivirus software sometimes checks `ffmpeg.exe` (the video engine bundled with 
 
 #### `.hlp` files show a blank or "?" icon
 
-Finder caches file icons. After installing or updating the app, open Highlight Editor once, then run this in **Terminal** to refresh them:
+Highlight Editor registers its file type with macOS each time it starts, so open the app once after installing or updating it. Finder then shows the new icon in windows you open from then on. Windows that were already open may keep the old icon until you close and reopen them.
+
+If the icons still don't change, Finder is holding on to its icon cache. Run this in **Terminal** to refresh it (it briefly restarts Finder):
 
 ```bash
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Highlight Editor.app" && killall Finder
