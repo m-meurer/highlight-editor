@@ -57,7 +57,9 @@ input[type='checkbox'] { width: auto; }
 
 .body { flex: 1; display: grid; grid-template-columns: 260px 1fr 340px; min-height: 0; }
 
-.library { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.library { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; position: relative; }
+.library.drop-active { outline: 2px dashed var(--accent); outline-offset: -6px; background: rgba(57,217,138,0.08); }
+.drop-overlay { position: absolute; inset: 0; display: grid; place-items: center; color: var(--accent); font-weight: 600; pointer-events: none; z-index: 2; background: rgba(15,17,21,0.55); }
 .panel-title { padding: 12px 12px 4px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 11px; padding: 0 12px 8px; line-height: 1.4; }
 .clip-list { overflow-y: auto; flex: 1; padding: 4px 8px; }
