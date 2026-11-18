@@ -39,10 +39,24 @@
     ],
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.video"
+      "category": "public.app-category.video",
+      "files": [
+        "!node_modules/ffprobe-static/bin/{linux,win32}/**"
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "files": [
+        "!node_modules/ffprobe-static/bin/{linux,darwin}/**",
+        "!node_modules/ffprobe-static/bin/win32/ia32/**"
+      ]
     },
     "directories": {
       "buildResources": "build"
@@ -55,7 +69,16 @@
         "role": "Editor",
         "icon": "hlp"
       }
-    ]
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Highlight Editor",
+      "artifactName": "Highlight-Editor-Setup-${version}.${ext}"
+    }
   },
   "allowScripts": {
     "electron@33.4.11": true,
