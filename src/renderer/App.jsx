@@ -868,9 +868,20 @@ function PreviewPanel({ clip, player, aspect, onUpdateClip, onTime }) {
   // their on-screen windows as you scrub, matching the exported result.
   const clipT = time - clip.inSec
   const hlStart = hl.startSec || 0
+  // Match the export. With "freeze" on, the marker is shown only during the
+  // held frame and is gone the moment motion resumes; while paused, it also
+  // shows when you're parked on its start frame, so it can be placed. Without
+  // freeze it stays up for durationSec of OUTPUT time, which is less source
+  // time on a slowed-down clip (the preview plays at normal speed).
+  const speed = clip.slowmo && clip.slowmo < 1 ? clip.slowmo : 1
+  const atHlStart = clipT >= hlStart - 0.05 && clipT <= hlStart + 0.05
   const hlOn =
     hl.enabled &&
-    (placing || (clipT >= hlStart - 0.05 && clipT <= hlStart + (hl.durationSec || 1.5)))
+    (placing ||
+      frozen ||
+      (hl.freeze
+        ? !playing && atHlStart
+        : clipT >= hlStart - 0.05 && clipT <= hlStart + (hl.durationSec || 1.5) * speed))
   const cardOn =
     clip.showPlayerCard &&
     (player.name || player.number) &&
