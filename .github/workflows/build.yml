@@ -70,15 +70,10 @@ jobs:
           node_modules/ffmpeg-static/ffmpeg -hide_banner -version | head -1
           node_modules/@ffprobe-installer/darwin-arm64/ffprobe -hide_banner -version | head -1
       - name: Build dmg
-        # identity "-" = ad-hoc signature. Not an Apple Developer ID, but
-        # Apple Silicon refuses to run code with no signature at all.
-        run: npm run build && npx electron-builder --mac dmg --arm64 --publish never -c.mac.identity=-
+        # The app gets an ad-hoc signature in build/afterPack.cjs.
+        run: npm run build && npx electron-builder --mac dmg --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # electron-builder skips signing on PR builds by default, which
-          # leaves Electron's original signature broken. Ad-hoc signing uses
-          # no secrets, so it's safe to do on PRs too.
-          CSC_FOR_PULL_REQUEST: 'true'
       - name: Check the app is signed (ad-hoc)
         run: codesign --verify --deep --verbose=2 "dist/mac-arm64/Highlight Editor.app"
       - uses: actions/upload-artifact@v7

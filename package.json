@@ -71,7 +71,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Highlight Editor",
       "artifactName": "Highlight-Editor-Setup-${version}.${ext}"
-    }
+    },
+    "afterPack": "build/afterPack.cjs"
   },
   "allowScripts": {
     "electron@33.4.11": true,
