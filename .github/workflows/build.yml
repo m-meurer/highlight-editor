@@ -76,6 +76,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Check the app is signed (ad-hoc)
         run: codesign --verify --deep --verbose=2 "dist/mac-arm64/Highlight Editor.app"
+      - name: Check the .hlp document type is declared
+        run: |
+          plutil -extract UTExportedTypeDeclarations.0.UTTypeIdentifier raw "dist/mac-arm64/Highlight Editor.app/Contents/Info.plist"
+          test -f "dist/mac-arm64/Highlight Editor.app/Contents/Resources/hlp.icns"
       - uses: actions/upload-artifact@v7
         with:
           name: mac-installer

@@ -135,6 +135,14 @@ Antivirus software sometimes checks `ffmpeg.exe` (the video engine bundled with 
 
 ### macOS
 
+#### `.hlp` files show a blank or "?" icon
+
+Finder caches file icons. After installing or updating the app, open Highlight Editor once, then run this in **Terminal** to refresh them:
+
+```bash
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Highlight Editor.app" && killall Finder
+```
+
 #### First launch: "Highlight Editor cannot be opened because Apple cannot check it for malicious software"
 
 On macOS 15 (Sequoia) and later:
